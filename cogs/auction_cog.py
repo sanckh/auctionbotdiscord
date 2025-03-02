@@ -3,10 +3,13 @@ from discord.ext import commands
 from datetime import datetime, timedelta
 from ..utils.bid_parser import parse_bid
 from ..utils.time_parser import parse_duration
+import logging
+
 
 class Auction(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print("🎪 Auction cog initialized")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -18,8 +21,9 @@ class Auction(commands.Cog):
         if content.startswith('!bid') or any(x in content for x in ['p ', 'g ', 's ', 'm ', 'plat', 'gold', 'silver', 'mith']):
             try:
                 await message.delete()
-            except (discord.Forbidden, discord.NotFound):
-                pass
+                print(f"🗑️ Deleted bid message from {message.author.name}")
+            except (discord.Forbidden, discord.NotFound) as e:
+                print(f"❌ Failed to delete bid message: {e}")
 
     @commands.command(name='auction')
     async def start_auction(self, ctx, item: str, duration: str):
@@ -78,22 +82,30 @@ class Auction(commands.Cog):
     @commands.command(name='bid')
     async def place_bid(self, ctx, *, bid: str):
         """Place a bid in the current auction"""
+        print(f"💰 New bid from {ctx.author.name} (ID: {ctx.author.id})")
+        print(f"📝 Bid content: {bid}")
+
         try:
             await ctx.message.delete()
-        except (discord.Forbidden, discord.NotFound):
-            pass
+        except (discord.Forbidden, discord.NotFound) as e:
+            print(f"❌ Failed to delete bid command: {e}")
 
         if ctx.channel.id not in self.bot.active_auctions:
+            print(f"⚠️ No active auction in channel {ctx.channel.name}")
             await ctx.author.send("❌ No active auction in this channel!")
             return
 
         auction = self.bot.active_auctions[ctx.channel.id]
+        print(f"🎯 Processing bid for auction: {auction['item']}")
+
         if datetime.now() >= auction['end_time']:
+            print(f"⚠️ Late bid attempt from {ctx.author.name}")
             await ctx.author.send("❌ This auction has ended!")
             return
 
         # Validate bid format and parse amount
         if not (result := parse_bid(bid)):
+            print(f"⚠️ Invalid bid format from {ctx.author.name}: {bid}")
             error_content = [
                 "❌ **Invalid bid format!**",
                 "",
@@ -116,46 +128,72 @@ class Auction(commands.Cog):
             return
 
         bid_amount, denomination = result
+        print(f"💎 Parsed bid: {bid_amount} ({denomination})")
 
-        # Check if this is the highest bid before adding it
+        # Check if this is the highest bid
         current_bids = auction['bids'].values()
         is_highest = not current_bids or bid_amount > max(current_bids)
+        print(f"👑 Bid is highest: {is_highest}")
 
         # Get current highest bidder before updating
         current_highest_bidder = None
         if auction['bids']:
-            current_highest_bidder = max(auction['bids'].items(), key=lambda x: x[1])[0]
+            current_highest = max(auction['bids'].items(), key=lambda x: x[1])
+            current_highest_bidder = current_highest[0]
+            print(f"📊 Current highest bidder ID: {current_highest_bidder}, Amount: {current_highest[1]}")
 
-        # Update bid and send confirmation
+        # Update bid
         auction['bids'][ctx.author.id] = bid_amount
+        print(f"✅ Updated auction bids. New bid from {ctx.author.name}: {bid_amount}")
         
         # Send confirmation to the bidder
-        confirm_content = [
-            f"📦 **Item:** `{auction['item']}`",
-            f"💰 **Your bid:** `{denomination}`",
-            f"📊 **Current Status:** {'You are the highest bidder!' if is_highest else 'You have been outbid.'}"
-        ]
-        await self.bot.send_formatted_message(ctx.author, "✅ BID PLACED SUCCESSFULLY! ✅", "32", confirm_content)
+        try:
+            confirm_content = [
+                f"📦 **Item:** `{auction['item']}`",
+                f"💰 **Your bid:** `{denomination}`",
+                f"📊 **Current Status:** {'You are the highest bidder!' if is_highest else 'You have been outbid.'}"
+            ]
+            await self.bot.send_formatted_message(ctx.author, "✅ BID PLACED SUCCESSFULLY! ✅", "32", confirm_content)
+            print(f"📨 Sent bid confirmation to {ctx.author.name}")
+        except Exception as e:
+            print(f"❌ Failed to send bid confirmation to {ctx.author.name}: {e}")
         
         # Notify previous highest bidder if they were outbid
         if is_highest and current_highest_bidder and current_highest_bidder != ctx.author.id:
+            print(f"📢 Attempting to notify outbid user (ID: {current_highest_bidder})")
+            
             if bidder := ctx.guild.get_member(current_highest_bidder):
+                print(f"👤 Found member object for outbid user: {bidder.name}")
                 their_bid = auction['bids'][current_highest_bidder]
+                
                 outbid_content = [
                     f"📦 **Item:** `{auction['item']}`",
                     f"💰 **Your bid:** `{parse_bid(str(their_bid))[1]}`",
                     "📊 **Current Status:** You have been outbid!",
                     "",
-                    "Place a new bid to stay in the auction!"
+                    "💡 **Quick Tip:** Place a new bid to stay in the auction!",
+                    f"Channel: {ctx.channel.mention}"
                 ]
+                
                 try:
+                    dm_channel = await bidder.create_dm()
+                    print(f"📬 Created DM channel for {bidder.name}")
+                    
                     await self.bot.send_formatted_message(bidder, "⚠️ OUTBID ALERT! ⚠️", "31", outbid_content)
-                except discord.Forbidden:
-                    print(f"Could not send DM to {bidder.name} (ID: {bidder.id}) - DMs may be disabled")
-                    # Try to notify in channel that user needs to enable DMs
+                    print(f"✅ Successfully sent outbid notification to {bidder.name}")
+                    
+                except discord.Forbidden as e:
+                    print(f"❌ Forbidden error sending DM to {bidder.name}: {e}")
                     try:
-                        await ctx.channel.send(f"⚠️ {bidder.mention} I couldn't send you a DM! Please enable DMs to receive outbid notifications.", delete_after=10)
-                    except:
-                        pass
+                        await ctx.channel.send(
+                            f"⚠️ {bidder.mention} I couldn't send you a DM! Please enable DMs to receive outbid notifications.", 
+                            delete_after=10
+                        )
+                        print(f"📢 Sent channel notification about DM failure to {bidder.name}")
+                    except Exception as e:
+                        print(f"❌ Failed to send channel notification: {e}")
+                
                 except Exception as e:
-                    print(f"Error sending DM to {bidder.name} (ID: {bidder.id}): {str(e)}")
+                    print(f"❌ Unexpected error sending outbid notification to {bidder.name}: {e}")
+            else:
+                print(f"❌ Could not find member object for outbid user ID: {current_highest_bidder}")
