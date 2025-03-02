@@ -247,7 +247,9 @@ class Auction(commands.Cog):
 
         # Check for auction extension
         time_remaining = auction['end_time'] - datetime.now()
-        current_highest_bidder = max(auction['bids'].items(), key=lambda x: x[1])[0] if auction['bids'] else None
+        current_highest_bidder = None
+        if auction['bids']:
+            current_highest_bidder = max(auction['bids'].items(), key=lambda x: x[1])[0]
         
         if time_remaining.total_seconds() <= 15 and current_highest_bidder and current_highest_bidder != ctx.author.id:
             auction['end_time'] = datetime.now() + timedelta(seconds=15)
@@ -264,6 +266,11 @@ class Auction(commands.Cog):
         current_bids = auction['bids'].values()
         is_highest = not current_bids or bid_amount > max(current_bids)
 
+        # Get current highest bidder before updating
+        current_highest_bidder = None
+        if auction['bids']:
+            current_highest_bidder = max(auction['bids'].items(), key=lambda x: x[1])[0]
+
         # Update bid and send confirmation
         auction['bids'][ctx.author.id] = bid_amount
         
@@ -275,21 +282,19 @@ class Auction(commands.Cog):
         ]
         await self.bot.send_formatted_message(ctx.author, "✅ BID PLACED SUCCESSFULLY! ✅", "32", confirm_content)
         
-        # Notify other bidders they've been outbid
-        if is_highest:  # Only notify others if this is the new highest bid
-            for bidder_id in auction['bids']:
-                if bidder_id != ctx.author.id:
-                    if bidder := ctx.guild.get_member(bidder_id):
-                        their_bid = auction['bids'][bidder_id]
-                        outbid_content = [
-                            f"📦 **Item:** `{auction['item']}`",
-                            f"💰 **Your bid:** `{parse_bid(str(their_bid))[1]}`",
-                            "📊 **Current Status:** You have been outbid!"
-                        ]
-                        try:
-                            await self.bot.send_formatted_message(bidder, "⚠️ OUTBID ALERT! ⚠️", "31", outbid_content)
-                        except discord.Forbidden:
-                            pass
+        # Notify previous highest bidder if they were outbid
+        if is_highest and current_highest_bidder and current_highest_bidder != ctx.author.id:
+            if bidder := ctx.guild.get_member(current_highest_bidder):
+                their_bid = auction['bids'][current_highest_bidder]
+                outbid_content = [
+                    f"📦 **Item:** `{auction['item']}`",
+                    f"💰 **Your bid:** `{parse_bid(str(their_bid))[1]}`",
+                    "📊 **Current Status:** You have been outbid!"
+                ]
+                try:
+                    await self.bot.send_formatted_message(bidder, "⚠️ OUTBID ALERT! ⚠️", "31", outbid_content)
+                except discord.Forbidden:
+                    print(f"Could not send DM to {bidder} - DMs may be disabled")
 
 def parse_bid(bid_str: str) -> tuple[int, str]:
     """Parse bid string into total silver amount and formatted display string"""
