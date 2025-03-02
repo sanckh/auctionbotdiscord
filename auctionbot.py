@@ -195,7 +195,7 @@ class Auction(commands.Cog):
         await self.bot.send_formatted_message(ctx, "🔨 SILENT AUCTION STARTED! 🔨", "33", content)
 
     @commands.command(name='bid')
-    async def place_bid(self, ctx, bid: str):
+    async def place_bid(self, ctx, *, bid: str):
         """Place a bid in the current auction"""
         try:
             await ctx.message.delete()
@@ -211,8 +211,21 @@ class Auction(commands.Cog):
             await ctx.author.send("❌ This auction has ended!")
             return
 
+        # Validate bid format and parse amount
         if not (result := parse_bid(bid)):
-            await ctx.author.send("❌ Invalid bid format. Check auction post for valid formats.")
+            error_content = [
+                "❌ **Invalid bid format!**",
+                "",
+                "**Correct formats:**",
+                "• Mithril: `1m` or `1mith` or `1mithril`",
+                "• Platinum: `50p` or `50plat` or `50platinum`",
+                "• Gold: `100g` or `100gold`",
+                "• Silver: `500s` or `500sil` or `500silver`",
+                "",
+                "**Mix currencies (in order):**",
+                "• `!bid 1m 50p 100g 500s`"
+            ]
+            await self.bot.send_formatted_message(ctx.author, "❌ INCORRECT BID FORMAT! ❌", "31", error_content)
             return
 
         bid_amount, denomination = result
