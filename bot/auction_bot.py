@@ -114,6 +114,7 @@ class AuctionBot(commands.Bot):
                 print(f"📨 Attempting to send DM to: {destination.name} (ID: {destination.id})")
                 dm_channel = await destination.create_dm()
                 print(f"📬 DM channel created for {destination.name}")
+                destination = dm_channel  # Use the DM channel instead of the member object
             
             message = [
                 "```ansi",
@@ -127,8 +128,8 @@ class AuctionBot(commands.Bot):
                 message.extend(footer)
             
             sent_message = await destination.send('\n'.join(message))
-            if isinstance(destination, discord.Member):
-                print(f"✅ Successfully sent DM to {destination.name}")
+            if isinstance(destination, discord.DMChannel):
+                print(f"✅ Successfully sent DM to {destination.recipient.name}")
             return sent_message
         except discord.Forbidden as e:
             print(f"❌ ERROR: Cannot send message to {destination}: No permission")

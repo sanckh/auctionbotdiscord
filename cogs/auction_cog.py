@@ -167,6 +167,8 @@ class Auction(commands.Cog):
                 their_bid = auction['bids'][current_highest_bidder]
                 
                 outbid_content = [
+                    "⚠️ **OUTBID ALERT!** ⚠️",
+                    "━━━━━━━━━━━━━━━━━━━━━━━━",
                     f"📦 **Item:** `{auction['item']}`",
                     f"💰 **Your bid:** `{parse_bid(str(their_bid))[1]}`",
                     "📊 **Current Status:** You have been outbid!",
@@ -177,9 +179,9 @@ class Auction(commands.Cog):
                 
                 try:
                     dm_channel = await bidder.create_dm()
-                    print(f"📬 Created DM channel for {bidder.name}")
+                    print(f"📨 Created DM channel for {bidder.name}")
                     
-                    await self.bot.send_formatted_message(bidder, "⚠️ OUTBID ALERT! ⚠️", "31", outbid_content)
+                    await dm_channel.send('\n'.join(outbid_content))
                     print(f"✅ Successfully sent outbid notification to {bidder.name}")
                     
                 except discord.Forbidden as e:
