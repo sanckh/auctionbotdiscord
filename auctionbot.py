@@ -105,12 +105,12 @@ class AuctionBot(commands.Bot):
         ]
         await self.send_formatted_message(winner, "🎊 CONGRATULATIONS! 🎊", "33", winner_content)
 
-    async def send_bid_confirmation(self, destination, item: str, bid_amount: int, denomination: str):
+    async def send_bid_confirmation(self, destination, item: str, bid_amount: int, denomination: str, channel_id: int):
         """Send bid confirmation message"""
         confirm_content = [
             f"📦 **Item:** `{item}`",
             f"💰 **Your bid:** `{denomination}`",
-            f"📊 **Current Status:** {'You are the highest bidder!' if bid_amount > max(self.active_auctions[destination.channel.id]['bids'].values()) else 'You have been outbid.'}"
+            f"📊 **Current Status:** {'You are the highest bidder!' if bid_amount > max(self.active_auctions[channel_id]['bids'].values()) else 'You have been outbid.'}"
         ]
         try:
             await self.send_formatted_message(destination, "✅ BID PLACED SUCCESSFULLY! ✅", "32", confirm_content)
@@ -240,7 +240,7 @@ class Auction(commands.Cog):
 
         # Update bid and send confirmation
         auction['bids'][ctx.author.id] = bid_amount
-        await self.bot.send_bid_confirmation(ctx.author, auction['item'], bid_amount, denomination)
+        await self.bot.send_bid_confirmation(ctx.author, auction['item'], bid_amount, denomination, ctx.channel.id)
 
 def parse_bid(bid_str: str) -> tuple[int, str]:
     """Parse bid string into total silver amount and formatted display string"""
