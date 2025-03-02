@@ -83,7 +83,7 @@ class AuctionBot(commands.Bot):
         if results_channel := channel.guild.get_channel(AUCTION_RESULTS_CHANNEL_ID):
             await self.send_formatted_message(results_channel, "🏁 AUCTION ENDED! 🏁", "31", content)
 
-    async def send_winner_messages(self, channel, item: str, winner: discord.Member, winning_bid: int):
+    async def send_winner_messages(self, channel, item: str, winner: discord.Member, winning_bid: float):
         """Send winner announcement messages"""
         # Public channel message (without bid amount)
         public_content = [
@@ -94,16 +94,31 @@ class AuctionBot(commands.Bot):
 
         # Results channel message (with bid amount)
         if results_channel := channel.guild.get_channel(AUCTION_RESULTS_CHANNEL_ID):
-            results_content = public_content + [f"💰 **Winning Bid:** `{winning_bid}`"]
+            results_content = public_content + [f"💰 **Winning Bid:** `{winning_bid:.2f}`"]
             await self.send_formatted_message(results_channel, "🎉 AUCTION ENDED! 🎉", "32", results_content)
 
         # Winner DM
         winner_content = [
             "You won the auction for:",
             f"📦 **Item:** `{item}`",
-            f"💰 **Your winning bid:** `{winning_bid}`"
+            f"💰 **Your winning bid:** `{winning_bid:.2f}`"
         ]
         await self.send_formatted_message(winner, "🎊 CONGRATULATIONS! 🎊", "33", winner_content)
+
+    async def send_bid_confirmation(self, destination, item: str, bid_amount: float, denomination: str):
+        """Send bid confirmation message"""
+        confirm_content = [
+            f"📦 **Item:** `{item}`",
+            f"💰 **Your bid:** `{bid_amount:.2f}{denomination}`",
+            f"📊 **Current Status:** {'You are the highest bidder!' if bid_amount > max(self.active_auctions[destination.channel.id]['bids'].values()) else 'You have been outbid.'}"
+        ]
+        try:
+            await self.send_formatted_message(destination, "✅ BID PLACED SUCCESSFULLY! ✅", "32", confirm_content)
+        except discord.Forbidden:
+            try:
+                await destination.send("✅ Bid received!", delete_after=3)
+            except:
+                pass
 
 class Auction(commands.Cog):
     def __init__(self, bot):
@@ -224,20 +239,9 @@ class Auction(commands.Cog):
 
         # Update bid and send confirmation
         auction['bids'][ctx.author.id] = bid_amount
-        confirm_content = [
-            f"📦 **Item:** `{auction['item']}`",
-            f"💰 **Your bid:** `{bid_amount}{denomination}`",
-            f"📊 **Current Status:** {'You are the highest bidder!' if bid_amount > highest_bid else 'You have been outbid.'}"
-        ]
-        try:
-            await self.bot.send_formatted_message(ctx.author, "✅ BID PLACED SUCCESSFULLY! ✅", "32", confirm_content)
-        except discord.Forbidden:
-            try:
-                await ctx.send("✅ Bid received!", delete_after=3)
-            except:
-                pass
+        await self.bot.send_bid_confirmation(ctx.author, auction['item'], bid_amount, denomination)
 
-def parse_bid(bid_str: str) -> tuple[int, str]:
+def parse_bid(bid_str: str) -> tuple[float, str]:
     """Parse bid string into total amount and appropriate denomination"""
     bid_str = bid_str.lower()
     # Handle full names and abbreviations
@@ -252,11 +256,11 @@ def parse_bid(bid_str: str) -> tuple[int, str]:
     
     total_amount = 0
     for part in bid_str.split():
-        if not (match := re.match(r'^(\d+)([mgps])$', part)):
+        if not (match := re.match(r'^(\d+(?:\.\d+)?)([mgps])$', part)):
             return None, None
             
         amount, unit = match.groups()
-        amount = int(amount)
+        amount = float(amount)
         
         multipliers = {
             'm': 1000000,
@@ -266,15 +270,15 @@ def parse_bid(bid_str: str) -> tuple[int, str]:
         }
         total_amount += amount * multipliers[unit]
     
-    # Convert to most appropriate denomination
+    # Convert to most appropriate denomination with decimals
     if total_amount >= 1000000:
-        return total_amount // 1000000, 'm'
+        return total_amount / 1000000, 'm'
     elif total_amount >= 10000:
-        return total_amount // 10000, 'p'
+        return total_amount / 10000, 'p'
     elif total_amount >= 100:
-        return total_amount // 100, 'g'
+        return total_amount / 100, 'g'
     else:
-        return total_amount, 's'
+        return float(total_amount), 's'
 
 def parse_duration(duration_str: str) -> timedelta:
     """Parse duration string into timedelta"""
